@@ -31,14 +31,13 @@ void record_receivers(TYPE *__restrict__ const receiver_amplitudes,
                       const ptrdiff_t num_shots,
                       const ptrdiff_t num_receivers_per_shot);
 void save_wavefields(TYPE *__restrict__ const current_saved_wavefield,
-		TYPE *__restrict__ const current_saved_wavefield_t,
-			TYPE *__restrict__ const current_saved_wavefield_tt,
+                     TYPE *__restrict__ const current_saved_wavefield_t,
+                     TYPE *__restrict__ const current_saved_wavefield_tt,
                      const TYPE *__restrict__ const next_wavefield,
                      const TYPE *__restrict__ const current_wavefield,
                      const TYPE *__restrict__ const previous_wavefield,
                      const ptrdiff_t *__restrict__ const shape,
-                     const ptrdiff_t num_shots,
-		     const TYPE dt,
+                     const ptrdiff_t num_shots, const TYPE dt,
                      const enum wavefield_save_strategy save_strategy);
 void imaging_condition(
     TYPE *__restrict__ const model_grad,
