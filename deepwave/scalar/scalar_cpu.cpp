@@ -73,9 +73,9 @@ void propagate(TYPE *__restrict__ const wfn,        /* next wavefield */
 
 void imaging_condition(TYPE *__restrict__ const model_grad,
                        const TYPE *__restrict__ const current_wavefield,
-                       const TYPE *__restrict__ const adjoint_wavefield,
-                       const TYPE *__restrict__ const adjoint_wavefield_t,
-                       const TYPE *__restrict__ const adjoint_wavefield_tt,
+                       const TYPE *__restrict__ const saved_wavefield,
+                       const TYPE *__restrict__ const saved_wavefield_t,
+                       const TYPE *__restrict__ const saved_wavefield_tt,
                        const TYPE *__restrict__ const sigma,
                        const ptrdiff_t *__restrict__ const shape,
                        const ptrdiff_t *__restrict__ const pml_width,
@@ -92,7 +92,7 @@ void imaging_condition(TYPE *__restrict__ const model_grad,
 
       model_grad[i] +=
           current_wavefield[si] *
-          (adjoint_wavefield_tt[si] + sigmaz[z] * adjoint_wavefield_t[si]);
+          (saved_wavefield_tt[si] + sigmaz[z] * saved_wavefield_t[si]);
     }
   }
 }
@@ -161,9 +161,9 @@ void propagate(TYPE *__restrict__ const wfn,        /* next wavefield */
 
 void imaging_condition(TYPE *__restrict__ const model_grad,
                        const TYPE *__restrict__ const current_wavefield,
-                       const TYPE *__restrict__ const adjoint_wavefield,
-                       const TYPE *__restrict__ const adjoint_wavefield_t,
-                       const TYPE *__restrict__ const adjoint_wavefield_tt,
+                       const TYPE *__restrict__ const saved_wavefield,
+                       const TYPE *__restrict__ const saved_wavefield_t,
+                       const TYPE *__restrict__ const saved_wavefield_tt,
                        const TYPE *__restrict__ const sigma,
                        const ptrdiff_t *__restrict__ const shape,
                        const ptrdiff_t *__restrict__ const pml_width,
@@ -182,9 +182,9 @@ void imaging_condition(TYPE *__restrict__ const model_grad,
         const ptrdiff_t si = shot * numel_shot + i;
 
         model_grad[i] += current_wavefield[si] *
-                         (adjoint_wavefield_tt[si] +
-                          (sigmaz[z] + sigmay[y]) * adjoint_wavefield_t[si] +
-                          sigmaz[z] * sigmay[y] * adjoint_wavefield[si]);
+                         (saved_wavefield_tt[si] +
+                          (sigmaz[z] + sigmay[y]) * saved_wavefield_t[si] +
+                          sigmaz[z] * sigmay[y] * saved_wavefield[si]);
       }
     }
   }
@@ -281,9 +281,9 @@ void propagate_3d(
 
 void imaging_condition(TYPE *__restrict__ const model_grad,
                        const TYPE *__restrict__ const current_wavefield,
-                       const TYPE *__restrict__ const adjoint_wavefield,
-                       const TYPE *__restrict__ const adjoint_wavefield_t,
-                       const TYPE *__restrict__ const adjoint_wavefield_tt,
+                       const TYPE *__restrict__ const saved_wavefield,
+                       const TYPE *__restrict__ const saved_wavefield_t,
+                       const TYPE *__restrict__ const saved_wavefield_tt,
                        const TYPE *__restrict__ const sigma,
                        const ptrdiff_t *__restrict__ const shape,
                        const ptrdiff_t *__restrict__ const pml_width,
@@ -309,11 +309,11 @@ void imaging_condition(TYPE *__restrict__ const model_grad,
            * the additional computational cost it would cause. */
           model_grad[i] +=
               current_wavefield[si] *
-              (adjoint_wavefield_tt[si] +
-               (sigmaz[z] + sigmay[y] + sigmax[x]) * adjoint_wavefield_t[si] +
+              (saved_wavefield_tt[si] +
+               (sigmaz[z] + sigmay[y] + sigmax[x]) * saved_wavefield_t[si] +
                (sigmax[x] * sigmay[y] + sigmay[y] * sigmaz[z] +
                 sigmax[x] * sigmaz[z]) *
-                   adjoint_wavefield[si]);
+                   saved_wavefield[si]);
         }
       }
     }
@@ -330,6 +330,8 @@ static inline ptrdiff_t location_index(
   return z * shape[1] * shape[2] + y * shape[2] + x;
 }
 
+#else
+#error "Must specify the dimension, e.g. -D DIM=1"
 #endif /* DIM */
 
 void add_sources(TYPE *__restrict__ const next_wavefield,
@@ -390,12 +392,12 @@ void save_wavefields(TYPE *__restrict__ const current_saved_wavefield,
           for (ptrdiff_t x = XPAD; x < shape[2] - XPAD; x++) {
             const ptrdiff_t i = z * size_xy + y * size_x + x;
             const ptrdiff_t si = shot * numel_shot + i;
+            current_saved_wavefield_t[si] =
+                (current_wavefield[si] - previous_wavefield[si]) / dt;
             current_saved_wavefield_tt[si] =
                 (next_wavefield[si] - 2 * current_wavefield[si] +
                  previous_wavefield[si]) /
                 dt / dt;
-            current_saved_wavefield_t[si] =
-                (current_wavefield[si] - previous_wavefield[si]) / dt;
           }
         }
       }
