@@ -5,13 +5,7 @@
 
 #include "scalar.h"
 
-static inline ptrdiff_t location_index_1d(const ptrdiff_t *__restrict__ const arr,
-                                const ptrdiff_t *__restrict__ const shape,
-                                const ptrdiff_t index);
-static inline ptrdiff_t location_index_2d(const ptrdiff_t *__restrict__ const arr,
-                                const ptrdiff_t *__restrict__ const shape,
-                                const ptrdiff_t index);
-static inline ptrdiff_t location_index_3d(const ptrdiff_t *__restrict__ const arr,
+static inline ptrdiff_t location_index(const ptrdiff_t *__restrict__ const arr,
                                 const ptrdiff_t *__restrict__ const shape,
                                 const ptrdiff_t index);
 static inline TYPE laplacian_1d(const TYPE *__restrict__ const arr,
@@ -42,8 +36,8 @@ static inline TYPE x_deriv(const TYPE *__restrict__ const arr,
 void setup(const TYPE *__restrict__ const fd1,
            const TYPE *__restrict__ const fd2) {}
 
-
-void propagate_1d(TYPE *__restrict__ const wfn,        /* next wavefield */
+#if DIM == 1
+void propagate(TYPE *__restrict__ const wfn,        /* next wavefield */
                TYPE *__restrict__ const auxn,       /* next auxiliary */
                const TYPE *__restrict__ const wfc,  /* current wavefield */
                const TYPE *__restrict__ const wfp,  /* previous wavefield */
@@ -86,7 +80,46 @@ void propagate_1d(TYPE *__restrict__ const wfn,        /* next wavefield */
 }
 
 
-void propagate_2d(TYPE *__restrict__ const wfn,        /* next wavefield */
+void imaging_condition(
+    TYPE *__restrict__ const model_grad,
+    const TYPE *__restrict__ const current_wavefield,
+    const TYPE *__restrict__ const adjoint_wavefield,
+    const TYPE *__restrict__ const adjoint_wavefield_t,
+    const TYPE *__restrict__ const adjoint_wavefield_tt,
+    const TYPE *__restrict__ const sigma,
+    const ptrdiff_t *__restrict__ const shape,
+    const ptrdiff_t *__restrict__ const pml_width, const ptrdiff_t num_shots,
+    const TYPE dt) {
+  if (model_grad == NULL) return; /* Not doing model inversion */
+
+  const ptrdiff_t numel_shot = shape[0];
+  const TYPE *__restrict__ const sigmaz = sigma;
+
+  for (ptrdiff_t shot = 0; shot < num_shots; shot++) {
+    for (ptrdiff_t z = ZPAD; z < shape[0] - ZPAD; z++) {
+
+  const ptrdiff_t i = z;
+  const ptrdiff_t si = shot * numel_shot + i;
+
+  model_grad[i] += current_wavefield[si] *
+                   (adjoint_wavefield_tt[si] + sigmaz[z] * adjoint_wavefield_t[si]);
+
+    }
+  }
+
+}
+
+static inline ptrdiff_t location_index(const ptrdiff_t *__restrict__ const arr,
+                                const ptrdiff_t *__restrict__ const shape,
+                                const ptrdiff_t index) {
+  const ptrdiff_t z = arr[index];
+
+  return z;
+}
+
+#elif DIM == 2
+
+void propagate(TYPE *__restrict__ const wfn,        /* next wavefield */
                TYPE *__restrict__ const auxn,       /* next auxiliary */
                const TYPE *__restrict__ const wfc,  /* current wavefield */
                const TYPE *__restrict__ const wfp,  /* previous wavefield */
@@ -141,6 +174,53 @@ void propagate_2d(TYPE *__restrict__ const wfn,        /* next wavefield */
 
 }
 
+
+void imaging_condition(
+    TYPE *__restrict__ const model_grad,
+    const TYPE *__restrict__ const current_wavefield,
+    const TYPE *__restrict__ const adjoint_wavefield,
+    const TYPE *__restrict__ const adjoint_wavefield_t,
+    const TYPE *__restrict__ const adjoint_wavefield_tt,
+    const TYPE *__restrict__ const sigma,
+    const ptrdiff_t *__restrict__ const shape,
+    const ptrdiff_t *__restrict__ const pml_width, const ptrdiff_t num_shots,
+    const TYPE dt) {
+  if (model_grad == NULL) return; /* Not doing model inversion */
+
+  const ptrdiff_t numel_shot = shape[0] * shape[1];
+  const ptrdiff_t size_xy = shape[1];
+  const TYPE *__restrict__ const sigmaz = sigma;
+  const TYPE *__restrict__ const sigmay = sigma + shape[0];
+
+  for (ptrdiff_t shot = 0; shot < num_shots; shot++) {
+    for (ptrdiff_t z = ZPAD; z < shape[0] - ZPAD; z++) {
+    for (ptrdiff_t y = YPAD; y < shape[1] - YPAD; y++) {
+
+  const ptrdiff_t i = z * size_xy + y;
+  const ptrdiff_t si = shot * numel_shot + i;
+
+  model_grad[i] +=
+      current_wavefield[si] *
+      (adjoint_wavefield_tt[si] + (sigmaz[z] + sigmay[y]) * adjoint_wavefield_t[si] +
+       sigmaz[z] * sigmay[y] * adjoint_wavefield[si]);
+
+    }
+    }
+  }
+
+}
+
+
+static inline ptrdiff_t location_index(const ptrdiff_t *__restrict__ const arr,
+                                const ptrdiff_t *__restrict__ const shape,
+                                const ptrdiff_t index) {
+  const ptrdiff_t z = arr[index * 2];
+  const ptrdiff_t y = arr[index * 2 + 1];
+
+  return z * shape[1] + y;
+}
+
+#elif DIM == 3
 
 void propagate_3d(TYPE *__restrict__ const wfn,        /* next wavefield */
                TYPE *__restrict__ const auxn,       /* next auxiliary */
@@ -225,19 +305,72 @@ void propagate_3d(TYPE *__restrict__ const wfn,        /* next wavefield */
 }
 
 
+void imaging_condition(
+    TYPE *__restrict__ const model_grad,
+    const TYPE *__restrict__ const current_wavefield,
+    const TYPE *__restrict__ const adjoint_wavefield,
+    const TYPE *__restrict__ const adjoint_wavefield_t,
+    const TYPE *__restrict__ const adjoint_wavefield_tt,
+    const TYPE *__restrict__ const sigma,
+    const ptrdiff_t *__restrict__ const shape,
+    const ptrdiff_t *__restrict__ const pml_width, const ptrdiff_t num_shots) {
+  if (model_grad == NULL) return; /* Not doing model inversion */
+
+  const ptrdiff_t numel_shot = shape[0] * shape[1];
+  const ptrdiff_t size_xy = shape[1];
+  const TYPE *__restrict__ const sigmaz = sigma;
+  const TYPE *__restrict__ const sigmay = sigma + shape[0];
+
+  for (ptrdiff_t shot = 0; shot < num_shots; shot++) {
+    for (ptrdiff_t z = ZPAD; z < shape[0] - ZPAD; z++) {
+    for (ptrdiff_t y = YPAD; y < shape[1] - YPAD; y++) {
+    for (ptrdiff_t x = XPAD; x < shape[2] - XPAD; x++) {
+
+  const ptrdiff_t i = z * size_xy + y * size_x + x;
+  const ptrdiff_t si = shot * numel_shot + i;
+
+  /* NOTE: There should be an additional term here (involving spatial
+   * derivative of phi, sigma, and psi), but it is neglected due to
+   * the additional computational cost it would cause. */
+  model_grad[i] +=
+      current_wavefield[si] *
+      (adjoint_wavefield_tt[si] +
+       (sigmaz[z] + sigmay[y] + sigmax[x]) * adjoint_wavefield_t[si] +
+       (sigmax[x] * sigmay[y] + sigmay[y] * sigmaz[z] + sigmax[x] * sigmaz[z]) *
+           adjoint_wavefield[si]);
+
+    }
+    }
+  }
+  }
+
+}
+
+
+static inline ptrdiff_t location_index(const ptrdiff_t *__restrict__ const arr,
+                                const ptrdiff_t *__restrict__ const shape,
+                                const ptrdiff_t index) {
+  const ptrdiff_t z = arr[index * 3];
+  const ptrdiff_t y = arr[index * 3 + 1];
+  const ptrdiff_t x = arr[index * 3 + 2];
+
+  return z * shape[1] * shape[2] + y * shape[2] + x;
+}
+
+#endif /* DIM */
+
+
 void add_sources(TYPE *__restrict__ const next_wavefield,
                  const TYPE *__restrict__ const model,
                  const TYPE *__restrict__ const source_amplitudes,
                  const ptrdiff_t *__restrict__ const source_locations,
                  const ptrdiff_t *__restrict__ const shape,
                  const ptrdiff_t num_shots,
-                 const ptrdiff_t num_sources_per_shot,
-		 const ptrdiff_t (*location_index)(const ptrdiff_t *__restrict__ const,
-			 const ptrdiff_t *__restrict__ const, const ptrdiff_t)) {
+                 const ptrdiff_t num_sources_per_shot) {
   for (ptrdiff_t shot = 0; shot < num_shots; shot++) {
     for (ptrdiff_t source = 0; source < num_sources_per_shot; source++) {
       const ptrdiff_t s = shot * num_sources_per_shot + source;
-      const ptrdiff_t i = (*location_index)(source_locations, shape, s);
+      const ptrdiff_t i = location_index(source_locations, shape, s);
       const ptrdiff_t si = shot * shape[0] * shape[1] * shape[2] + i;
       next_wavefield[si] += source_amplitudes[s] * model[i];
     }
@@ -249,9 +382,7 @@ void record_receivers(TYPE *__restrict__ const receiver_amplitudes,
                       const ptrdiff_t *__restrict__ const receiver_locations,
                       const ptrdiff_t *__restrict__ const shape,
                       const ptrdiff_t num_shots,
-                      const ptrdiff_t num_receivers_per_shot,
-		 const ptrdiff_t (*location_index)(const ptrdiff_t *__restrict__ const,
-			 const ptrdiff_t *__restrict__ const, const ptrdiff_t)) {
+                      const ptrdiff_t num_receivers_per_shot) {
   if (receiver_amplitudes == NULL) return; /* no source inversion */
 
   for (ptrdiff_t shot = 0; shot < num_shots; shot++) {
@@ -259,123 +390,47 @@ void record_receivers(TYPE *__restrict__ const receiver_amplitudes,
          receiver++) {
       const ptrdiff_t r = shot * num_receivers_per_shot + receiver;
       const ptrdiff_t si = shot * shape[0] * shape[1] * shape[2] +
-                     (*location_index)(receiver_locations, shape, r);
+                     location_index(receiver_locations, shape, r);
       receiver_amplitudes[r] = current_wavefield[si];
     }
   }
 }
 
-void save_wavefields(TYPE *__restrict__ const saved_wavefields,
+void save_wavefields(TYPE *__restrict__ const current_saved_wavefield,
+			TYPE *__restrict__ const current_saved_wavefield_t,
+			TYPE *__restrict__ const current_saved_wavefield_tt,
+                     const TYPE *__restrict__ const next_wavefield,
                      const TYPE *__restrict__ const current_wavefield,
+                     const TYPE *__restrict__ const previous_wavefield,
                      const ptrdiff_t *__restrict__ const shape,
-                     const ptrdiff_t num_shots, const ptrdiff_t step,
+                     const ptrdiff_t num_shots,
+		     const TYPE dt,
                      const enum wavefield_save_strategy save_strategy) {
   if (save_strategy == STRATEGY_COPY) {
-    TYPE *__restrict__ current_saved_wavefield = set_step_pointer(
-        saved_wavefields, step, num_shots, shape[0] * shape[1] * shape[2]);
-    memcpy(current_saved_wavefield, current_wavefield,
-           num_shots * shape[0] * shape[1] * shape[2] * sizeof(TYPE));
-  }
-}
-
-void imaging_condition_1d(
-    TYPE *__restrict__ const model_grad,
-    const TYPE *__restrict__ const current_wavefield,
-    const TYPE *__restrict__ const next_adjoint_wavefield,
-    const TYPE *__restrict__ const current_adjoint_wavefield,
-    const TYPE *__restrict__ const previous_adjoint_wavefield,
-    const TYPE *__restrict__ const sigma,
-    const ptrdiff_t *__restrict__ const shape,
-    const ptrdiff_t *__restrict__ const pml_width, const ptrdiff_t num_shots,
-    const TYPE dt) {
-  if (model_grad == NULL) return; /* Not doing model inversion */
-
-  const ptrdiff_t numel_shot = shape[0];
-  const TYPE *__restrict__ const sigmaz = sigma;
-
-  for (ptrdiff_t shot = 0; shot < num_shots; shot++) {
-    for (ptrdiff_t z = ZPAD; z < shape[0] - ZPAD; z++) {
-
-  const ptrdiff_t i = z;
-  const ptrdiff_t si = shot * numel_shot + i;
-
-  TYPE adjoint_wavefield_tt =
-      (next_adjoint_wavefield[si] - 2 * current_adjoint_wavefield[si] +
-       previous_adjoint_wavefield[si]) /
-      (dt * dt);
-
-  TYPE adjoint_wavefield_t =
-      (next_adjoint_wavefield[si] - previous_adjoint_wavefield[si]) / (2 * dt);
-
-  model_grad[i] += current_wavefield[si] *
-                   (adjoint_wavefield_tt + sigmaz[z] * adjoint_wavefield_t);
-
-    }
-  }
-
-}
-
-void imaging_condition(
-    TYPE *__restrict__ const model_grad,
-    const TYPE *__restrict__ const current_wavefield,
-    const TYPE *__restrict__ const next_adjoint_wavefield,
-    const TYPE *__restrict__ const current_adjoint_wavefield,
-    const TYPE *__restrict__ const previous_adjoint_wavefield,
-    const TYPE *__restrict__ const sigma,
-    const ptrdiff_t *__restrict__ const shape,
-    const ptrdiff_t *__restrict__ const pml_width, const ptrdiff_t num_shots,
-    const TYPE dt) {
-  if (model_grad == NULL) return; /* Not doing model inversion */
 
   const ptrdiff_t numel_shot = shape[0] * shape[1] * shape[2];
   const ptrdiff_t size_x = shape[2];
   const ptrdiff_t size_xy = shape[1] * shape[2];
-  const TYPE *__restrict__ const sigmaz = sigma;
-  const TYPE *__restrict__ const sigmay = sigma + shape[0];
-  const TYPE *__restrict__ const sigmax = sigma + shape[0] + shape[1];
+    memcpy(current_saved_wavefield, current_wavefield,
+           num_shots * shape[0] * shape[1] * shape[2] * sizeof(TYPE));
 
-  LOOP(num_shots, ZPAD, shape[0] - ZPAD, YPAD, shape[1] - YPAD, XPAD,
-       shape[2] - XPAD);
+  for (ptrdiff_t shot = 0; shot < num_shots; shot++) {
+    for (ptrdiff_t z = ZPAD; z < shape[0] - ZPAD; z++) {
+    	for (ptrdiff_t y = YPAD; y < shape[1] - YPAD; y++) {
+    	for (ptrdiff_t x = XPAD; x < shape[2] - XPAD; x++) {
 
-  ptrdiff_t i = z * size_xy + y * size_x + x;
-  ptrdiff_t si = shot * numel_shot + i;
-
-  TYPE adjoint_wavefield_tt =
-      (next_adjoint_wavefield[si] - 2 * current_adjoint_wavefield[si] +
-       previous_adjoint_wavefield[si]) /
-      (dt * dt);
-
-  TYPE adjoint_wavefield_t =
-      (next_adjoint_wavefield[si] - previous_adjoint_wavefield[si]) / (2 * dt);
-
-#if DIM == 1
-
-  model_grad[i] += current_wavefield[si] *
-                   (adjoint_wavefield_tt + sigmaz[z] * adjoint_wavefield_t);
-
-#elif DIM == 2
-
-  model_grad[i] +=
-      current_wavefield[si] *
-      (adjoint_wavefield_tt + (sigmaz[z] + sigmay[y]) * adjoint_wavefield_t +
-       sigmaz[z] * sigmay[y] * current_adjoint_wavefield[si]);
-
-#elif DIM == 3
-
-  /* NOTE: There should be an additional term here (involving spatial
-   * derivative of phi, sigma, and psi), but it is neglected due to
-   * the additional computational cost it would cause. */
-  model_grad[i] +=
-      current_wavefield[si] *
-      (adjoint_wavefield_tt +
-       (sigmaz[z] + sigmay[y] + sigmax[x]) * adjoint_wavefield_t +
-       (sigmax[x] * sigmay[y] + sigmay[y] * sigmaz[z] + sigmax[x] * sigmaz[z]) *
-           current_adjoint_wavefield[si]);
-
-#endif /* DIM */
-
-  ENDLOOP;
+  const ptrdiff_t i = z * size_xy + y * size_x + x;
+  const ptrdiff_t si = shot * numel_shot + i;
+  adjoint_wavefield_tt[si] = (next_wavefield[si] - 2 * current_wavefield[si] + previous_wavefield[si]) / dt / dt;
+  adjoint_wavefield_t[si] = (current_wavefield[si] - previous_wavefield[si]) / dt;
+	}
+	}
+    }
+  }
+  }
 }
+
+
 
 void model_grad_scaling(TYPE *__restrict__ const model_grad,
                         const TYPE *__restrict__ const scaling,
@@ -391,34 +446,11 @@ void model_grad_scaling(TYPE *__restrict__ const model_grad,
 }
 
 
-static inline ptrdiff_t location_index_1d(const ptrdiff_t *__restrict__ const arr,
-                                const ptrdiff_t *__restrict__ const shape,
-                                const ptrdiff_t index) {
-  const ptrdiff_t z = arr[index];
-
-  return z;
-}
 
 
-static inline ptrdiff_t location_index_2d(const ptrdiff_t *__restrict__ const arr,
-                                const ptrdiff_t *__restrict__ const shape,
-                                const ptrdiff_t index) {
-  const ptrdiff_t z = arr[index * 2];
-  const ptrdiff_t y = arr[index * 2 + 1];
-
-  return z * shape[1] + y;
-}
 
 
-static inline ptrdiff_t location_index_3d(const ptrdiff_t *__restrict__ const arr,
-                                const ptrdiff_t *__restrict__ const shape,
-                                const ptrdiff_t index) {
-  const ptrdiff_t z = arr[index * 3];
-  const ptrdiff_t y = arr[index * 3 + 1];
-  const ptrdiff_t x = arr[index * 3 + 2];
 
-  return z * shape[1] * shape[2] + y * shape[2] + x;
-}
 
 
 static inline TYPE laplacian_1d(const TYPE *__restrict__ const arr,

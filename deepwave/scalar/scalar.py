@@ -349,11 +349,11 @@ def _allocate_wavefields(wavefield_save_strategy, scalar_wrapper, model,
     """
 
     if wavefield_save_strategy == scalar_wrapper.STRATEGY_NONE:
-        wavefield = model.allocate_wavefield(2, num_shots)
+        wavefield = model.allocate_wavefield(3, num_shots)
         saved_wavefields = wavefield
     elif wavefield_save_strategy == scalar_wrapper.STRATEGY_COPY:
-        wavefield = model.allocate_wavefield(2, num_shots)
-        saved_wavefields = model.allocate_wavefield(num_steps, num_shots)
+        wavefield = model.allocate_wavefield(3, num_shots)
+        saved_wavefields = model.allocate_wavefield(num_steps, 3 * num_shots)
 
     return wavefield, saved_wavefields
 
