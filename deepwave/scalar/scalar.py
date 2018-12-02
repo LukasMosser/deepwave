@@ -145,7 +145,7 @@ class PropagatorFunction(torch.autograd.Function):
             None for the other inputs to forward modeling.
         """
 
-        (adjoint_wavefield, aux, sigma, vp2dt2, scaling,
+        (saved_wavefields, aux, sigma, vp2dt2, scaling,
          pml_width, source_model_locations, receiver_model_locations,
          step_ratio, inner_dt, fd1, fd2,
          model_gradient, source_gradient) = ctx.saved_tensors
@@ -164,7 +164,7 @@ class PropagatorFunction(torch.autograd.Function):
         aux.fill_(0)
         model_gradient.fill_(0)
         source_gradient.fill_(0)
-        wavefield = torch.zeros_like(aux[:2])
+        wavefield = torch.zeros(3, *aux[0].shape, device=aux.device)
 
         grad_receiver_amplitudes_resampled = \
                 scipy.signal.resample(grad_receiver_amplitudes
@@ -186,7 +186,7 @@ class PropagatorFunction(torch.autograd.Function):
             aux.to(dtype).contiguous(),
             model_gradient,
             source_gradient,
-            adjoint_wavefield.to(dtype).contiguous(),
+            saved_wavefields.to(dtype).contiguous(),
             scaling.to(dtype).contiguous(),
             sigma.to(dtype).contiguous(),
             vp2dt2.to(dtype).contiguous(),

@@ -201,7 +201,7 @@ static inline ptrdiff_t location_index(
 
 #elif DIM == 3
 
-void propagate_3d(
+void propagate(
     TYPE *__restrict__ const wfn,        /* next wavefield */
     TYPE *__restrict__ const auxn,       /* next auxiliary */
     const TYPE *__restrict__ const wfc,  /* current wavefield */
@@ -393,11 +393,10 @@ void save_wavefields(TYPE *__restrict__ const current_saved_wavefield,
             const ptrdiff_t i = z * size_xy + y * size_x + x;
             const ptrdiff_t si = shot * numel_shot + i;
             current_saved_wavefield_t[si] =
-                (current_wavefield[si] - previous_wavefield[si]) / dt;
+                (next_wavefield[si] - previous_wavefield[si]) / 2 / dt;
             current_saved_wavefield_tt[si] =
                 (next_wavefield[si] - 2 * current_wavefield[si] +
-                 previous_wavefield[si]) /
-                dt / dt;
+                 previous_wavefield[si]) / dt / dt;
           }
         }
       }
